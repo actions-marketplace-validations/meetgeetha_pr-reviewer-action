@@ -5,6 +5,8 @@ RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
+# Force rebuild - v1.0.1 (fixes 403 error and LangChain deprecations)
+
 # Copy backend code
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
