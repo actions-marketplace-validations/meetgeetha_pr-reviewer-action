@@ -23,6 +23,9 @@ on:
 jobs:
   review:
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: read
     steps:
       - name: AI PR Review
         uses: yourusername/pr-reviewer-action@v1
@@ -35,8 +38,10 @@ jobs:
 
 1. Get an OpenAI API key from https://platform.openai.com/api-keys
 2. Add it to your repository secrets as `OPENAI_API_KEY`
-3. Add the workflow file above
+3. Add the workflow file above (make sure to include the `permissions` block!)
 4. Create a PR and watch the magic happen! ✨
+
+**Important**: The `permissions` block is required for the action to post comments on PRs. Without it, you'll get a 403 "Resource not accessible by integration" error.
 
 ## Inputs
 

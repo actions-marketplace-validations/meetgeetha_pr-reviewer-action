@@ -48,6 +48,9 @@ on:
 jobs:
   review:
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -72,26 +75,42 @@ jobs:
 
 That's it! The action will automatically review your PR and post comments with detailed feedback.
 
+**Note**: The `permissions` block in the workflow is required for the action to post comments. Without it, you'll get a 403 "Resource not accessible by integration" error.
+
 ## 📖 Usage
 
 ### Basic Usage
 
-The action runs automatically on pull requests. No additional configuration needed!
+The action runs automatically on pull requests. Make sure to include the required permissions:
 
 ```yaml
-- uses: meetgeetha/pr-reviewer-action@main
-  with:
-    openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: meetgeetha/pr-reviewer-action@main
+        with:
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
 ```
 
 ### Advanced Usage
 
 ```yaml
-- uses: meetgeetha/pr-reviewer-action@main
-  with:
-    openai_api_key: ${{ secrets.OPENAI_API_KEY }}
-    github_token: ${{ secrets.GITHUB_TOKEN }}  # Optional, defaults to GITHUB_TOKEN
-    openai_model: gpt-4-turbo-preview          # Optional, choose your model
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: meetgeetha/pr-reviewer-action@main
+        with:
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}  # Optional, defaults to GITHUB_TOKEN
+          openai_model: gpt-4-turbo-preview          # Optional, choose your model
 ```
 
 ### Supported Models
