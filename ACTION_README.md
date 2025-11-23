@@ -57,7 +57,12 @@ The action will post a comment on your PR with:
 
 ## Self-Hosting
 
-Want to run your own instance? See the [Docker deployment guide](./docs/DEPLOYMENT.md).
+Want to run your own instance? You can build and run the Docker container locally:
+
+```bash
+docker build -f Dockerfile.action -t pr-reviewer-action .
+docker run -e OPENAI_API_KEY=your-key -e GITHUB_TOKEN=your-token pr-reviewer-action
+```
 
 ## License
 

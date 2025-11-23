@@ -245,13 +245,17 @@ that should be addressed.
 For local testing of the GitHub Action:
 
 ```bash
-# Install act (see DEPLOYMENT.md for instructions)
+# Install act: https://github.com/nektos/act#installation
+# Windows: winget install nektos.act
+# Mac: brew install act
+# Linux: See act installation guide
+
 act pull_request -W .github/workflows/test-action.yml \
   -s OPENAI_API_KEY=your-key \
   -s GITHUB_TOKEN=your-token
 ```
 
-**Note**: For Windows users, use WSL for best compatibility. See [DEPLOYMENT.md](./DEPLOYMENT.md) for details.
+**Note**: For Windows users, use WSL for best compatibility. The action runs in a Docker container, so Docker must be running.
 
 ### Building the Docker Image
 
@@ -313,7 +317,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📚 Additional Resources
 
-- [Deployment Guide](./DEPLOYMENT.md) - Detailed deployment options
 - [Action README](./ACTION_README.md) - Quick reference for action usage
 - [OpenAI Documentation](https://platform.openai.com/docs)
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
@@ -333,6 +336,6 @@ If you find this project useful, please consider giving it a star! ⭐
 
 **Made with ❤️ by [Geethakrishnan Balasubramanian](https://github.com/meetgeetha)**
 
-[Report Bug](https://github.com/meetgeetha/pr-reviewer-action/issues) • [Request Feature](https://github.com/meetgeetha/pr-reviewer-action/issues) • [Documentation](./DEPLOYMENT.md)
+[Report Bug](https://github.com/meetgeetha/pr-reviewer-action/issues) • [Request Feature](https://github.com/meetgeetha/pr-reviewer-action/issues)
 
 </div>
