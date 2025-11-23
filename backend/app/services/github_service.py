@@ -54,10 +54,11 @@ class GitHubService:
         """
         try:
             repo_name = f"{owner}/{repo}"
+            print(f"🔍 Fetching PR #{pr_number} from {repo_name}...")
             repository = self.client.get_repo(repo_name)
             pr = repository.get_pull(pr_number)
             
-            return {
+            pr_data = {
                 "number": pr.number,
                 "title": pr.title,
                 "body": pr.body,
@@ -69,7 +70,11 @@ class GitHubService:
                     }
                 }
             }
+            
+            print(f"✅ Retrieved PR #{pr_data['number']}: {pr_data['title']}")
+            return pr_data
         except Exception as e:
+            print(f"❌ Error fetching PR #{pr_number}: {str(e)}")
             raise Exception(f"Error getting pull request: {str(e)}")
 
     def get_pr_diff(self, pr_data: Dict) -> Dict[str, Any]:
@@ -137,13 +142,18 @@ class GitHubService:
             print(f"   PR Number: {pr_number}")
             
             # Verify PR number matches what we expect
-            if "number" in pr_data and pr_data["number"] != pr_number:
-                print(f"⚠️  Warning: PR number mismatch. Expected {pr_number}, got {pr_data['number']}")
+            actual_pr_number = pr_data.get("number", pr_number)
+            if actual_pr_number != pr_number:
+                print(f"⚠️  Warning: PR number mismatch. Using {actual_pr_number} from PR data (expected {pr_number})")
+                pr_number = actual_pr_number  # Use the actual PR number from the data
 
             # Create review comment body with inline comments included
             comment_body = self._format_review_comment(review_result, include_inline=True)
             print(f"   Comment length: {len(comment_body)} characters")
             print(f"   Comment preview (first 200 chars): {comment_body[:200]}...")
+            
+            if not comment_body or len(comment_body.strip()) == 0:
+                raise Exception("Comment body is empty! Cannot post empty comment.")
 
             # Try using REST API directly first (more reliable for permissions)
             try:
@@ -182,9 +192,15 @@ class GitHubService:
                             verify_url = f"https://api.github.com/repos/{owner}/{repo}/issues/comments/{comment_id}"
                             verify_response = requests.get(verify_url, headers=headers, timeout=10)
                             if verify_response.status_code == 200:
+                                verify_data = verify_response.json()
+                                verified_pr_number = verify_data.get("issue_url", "").split("/")[-1]
                                 print(f"   ✅ Verified: Comment exists and is accessible")
+                                print(f"   Verified on issue/PR: #{verified_pr_number}")
+                                if str(verified_pr_number) != str(pr_number):
+                                    print(f"   ⚠️  WARNING: Comment was posted to issue #{verified_pr_number}, not PR #{pr_number}!")
                             else:
                                 print(f"   ⚠️  Warning: Could not verify comment (status {verify_response.status_code})")
+                                print(f"   Response: {verify_response.text[:200]}")
                         
                         return  # Success!
                     except Exception as parse_error:
@@ -210,25 +226,37 @@ class GitHubService:
                 else:
                     # Log the error and try PyGithub as fallback
                     print(f"⚠️  REST API returned status {response.status_code}")
-                    print(f"   Response: {response.text[:200]}")
+                    print(f"   Response: {response.text[:500]}")
                     print(f"   Attempting fallback to PyGithub...")
-                    raise Exception(f"REST API returned {response.status_code}: {response.text}")
+                    # Don't raise here, let it fall through to PyGithub fallback
+                    raise requests.RequestException(f"REST API returned {response.status_code}: {response.text}")
                     
-            except Exception as rest_error:
+            except (requests.RequestException, Exception) as rest_error:
                 # Fallback to PyGithub if REST API fails
-                print(f"⚠️  REST API failed: {str(rest_error)}")
+                error_msg = str(rest_error)
+                print(f"⚠️  REST API failed: {error_msg}")
                 print(f"   Attempting fallback to PyGithub...")
                 try:
                     repo = self.client.get_repo(repo_name)
                     issue = repo.get_issue(pr_number)
+                    print(f"   Creating comment via PyGithub on issue #{pr_number}...")
                     comment = issue.create_comment(comment_body)
                     print(f"✅ Comment posted successfully via PyGithub!")
+                    print(f"   Comment ID: {comment.id}")
                     print(f"   Comment URL: {comment.html_url}")
                     print(f"   PR #{pr_number} in {repo_name}")
+                    print(f"   View PR: https://github.com/{repo_name}/pull/{pr_number}")
                     return
                 except Exception as pygithub_error:
-                    # If both fail, raise the original REST API error
-                    raise rest_error
+                    # If both fail, raise a comprehensive error
+                    print(f"❌ Both REST API and PyGithub failed!")
+                    print(f"   REST API error: {error_msg}")
+                    print(f"   PyGithub error: {str(pygithub_error)}")
+                    raise Exception(
+                        f"Failed to post comment using both methods.\n"
+                        f"REST API error: {error_msg}\n"
+                        f"PyGithub error: {str(pygithub_error)}"
+                    )
 
         except Exception as e:
             error_msg = str(e)

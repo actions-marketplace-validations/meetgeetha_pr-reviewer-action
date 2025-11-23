@@ -85,9 +85,13 @@ except (ValueError, TypeError) as e:
 
 # Fetch PR and review
 try:
+    print(f'🔍 Fetching PR #{pr_number} from {repo_str}...')
     pr_data = github_service.get_pull_request(owner, repo, pr_number)
+    print(f'📊 Analyzing PR diff...')
     diff_data = github_service.get_pr_diff(pr_data)
+    print(f'🤖 Running AI analysis...')
     result = review_service.analyze_code(diff_data)
+    print(f'💬 Posting review comment...')
     
     # Post review as comment
     github_service.post_review_comments(pr_data, result)
