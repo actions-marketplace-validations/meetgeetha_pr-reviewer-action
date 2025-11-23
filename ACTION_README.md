@@ -43,6 +43,32 @@ jobs:
 
 **Important**: The `permissions` block is required for the action to post comments on PRs. Without it, you'll get a 403 "Resource not accessible by integration" error.
 
+## Troubleshooting
+
+### 403 Forbidden Error
+
+If you're getting a 403 error when the action tries to post comments:
+
+1. **Check your workflow file has permissions**: Make sure your workflow includes the `permissions` block as shown in the example above.
+
+2. **Verify the permissions are correct**: The job needs:
+   ```yaml
+   permissions:
+     issues: write
+     pull-requests: read
+   ```
+
+3. **Fork PRs**: If the PR is from a fork, `GITHUB_TOKEN` has limited permissions. You may need to use a Personal Access Token (PAT) with `repo` scope instead:
+   ```yaml
+   - name: AI PR Review
+     uses: yourusername/pr-reviewer-action@v1
+     with:
+       openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+       github_token: ${{ secrets.PAT_TOKEN }}  # Use PAT instead of GITHUB_TOKEN
+   ```
+
+4. **Repository settings**: Check that your repository allows GitHub Actions to write to issues/comments in Settings → Actions → General → Workflow permissions.
+
 ## Inputs
 
 | Input | Required | Default | Description |

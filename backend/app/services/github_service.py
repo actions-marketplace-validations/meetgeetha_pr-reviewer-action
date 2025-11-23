@@ -95,7 +95,7 @@ class GitHubService:
     def post_review_comments(self, pr_data: Dict, review_result: Dict) -> None:
         """
         Post review comments to a pull request as an issue comment
-        (Works with default GITHUB_TOKEN permissions in GitHub Actions)
+        Requires 'issues: write' permission in the workflow
 
         Args:
             pr_data: Pull request data from webhook
@@ -106,16 +106,29 @@ class GitHubService:
             pr_number = pr_data["number"]
 
             repo = self.client.get_repo(repo_name)
-            pr = repo.get_pull(pr_number)
-
+            
             # Create review comment body with inline comments included
             comment_body = self._format_review_comment(review_result, include_inline=True)
 
-            # Post as issue comment (works with default GITHUB_TOKEN permissions)
-            pr.create_issue_comment(comment_body)
+            # Post as issue comment using the issue number (PRs are also issues)
+            # This method is more reliable than pr.create_issue_comment()
+            issue = repo.get_issue(pr_number)
+            issue.create_comment(comment_body)
 
         except Exception as e:
-            raise Exception(f"Error posting review comments: {str(e)}")
+            error_msg = str(e)
+            # Provide helpful error message for 403 errors
+            if "403" in error_msg or "Resource not accessible by integration" in error_msg:
+                raise Exception(
+                    f"Permission denied (403): Unable to post comment on PR #{pr_number}.\n"
+                    f"This usually means the workflow is missing required permissions.\n"
+                    f"Please add this to your workflow file under the job:\n\n"
+                    f"  permissions:\n"
+                    f"    issues: write\n"
+                    f"    pull-requests: read\n\n"
+                    f"Original error: {error_msg}"
+                )
+            raise Exception(f"Error posting review comments: {error_msg}")
 
     def _detect_language(self, filename: str) -> str:
         """Detect programming language from filename"""
