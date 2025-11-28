@@ -288,7 +288,7 @@ class GitHubService:
 
     def _format_review_comment(self, review_result: Dict, include_inline: bool = False) -> str:
         """Format the review result into a markdown comment"""
-        comment = "## 🤖 Automated Code Review\n\n"
+        comment = "## 🤖 AI Code Review\n\n"
 
         # Summary section
         if review_result.get("summary"):
