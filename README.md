@@ -26,6 +26,17 @@
 - **GitHub & GitLab**: Supports both GitHub and GitLab platforms
 - **Customizable**: Configurable review depth and model selection
 
+## 📋 Version Selection
+
+Choose the version that best fits your needs:
+
+| Version | Branch | Features | Best For |
+|---------|--------|----------|----------|
+| `@agentic_ai_v2` | AGENTIC_AI | 🤖 Advanced AI Analysis<br/>📊 RAG-Enhanced Reviews<br/>🔄 Comprehensive Feedback | Teams wanting detailed, context-aware reviews |
+| `@main` | main | ✅ Basic Code Review<br/>🚀 Simple Setup<br/>⚡ Fast Analysis | Quick setup and straightforward reviews |
+
+> **💡 Tip**: Start with `@agentic_ai_v2` for the most comprehensive review experience!
+
 ## 🚀 Quick Start
 
 ### 1. Get Your OpenAI API Key
@@ -61,7 +72,7 @@ jobs:
           fetch-depth: 0
       
       - name: AI PR Review
-        uses: meetgeetha/pr-reviewer-action@v1
+        uses: meetgeetha/pr-reviewer-action@agentic_ai_v2
         with:
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -97,7 +108,7 @@ jobs:
       issues: write
       pull-requests: read
     steps:
-      - uses: meetgeetha/pr-reviewer-action@main
+      - uses: meetgeetha/pr-reviewer-action@agentic_ai_v2
         with:
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
 ```
@@ -112,7 +123,7 @@ jobs:
       issues: write
       pull-requests: read
     steps:
-      - uses: meetgeetha/pr-reviewer-action@main
+      - uses: meetgeetha/pr-reviewer-action@agentic_ai_v2
         with:
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}  # Optional, defaults to GITHUB_TOKEN
