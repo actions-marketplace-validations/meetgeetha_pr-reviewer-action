@@ -61,7 +61,7 @@ jobs:
           fetch-depth: 0
       
       - name: AI PR Review
-        uses: meetgeetha/pr-reviewer-action@v1
+        uses: meetgeetha/pr-reviewer-action@main
         with:
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
