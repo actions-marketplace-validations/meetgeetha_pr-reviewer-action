@@ -66,8 +66,21 @@ jobs:
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           openai_model: gpt-4-turbo-preview
-
 ```
+
+#### Branch selection
+
+- **Stable (`main`)** – default reviewer profile:
+  ```yaml
+  uses: meetgeetha/pr-reviewer-action@main
+  ```
+- **Agentic (`agentic_ai_v2`)** – experimental agent with deeper autonomy:
+  ```yaml
+  uses: meetgeetha/pr-reviewer-action@agentic_ai_v2
+  ```
+  Choose the branch that matches the behavior you want before copying the workflow.
+
+> **Agentic AI branch**: If you need the agentic workflow variant, set the `uses` line to `meetgeetha/pr-reviewer-action@agentic_ai_v2`.
 
 ### 3. Add Your API Key to Secrets
 

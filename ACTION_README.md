@@ -28,10 +28,22 @@ jobs:
       pull-requests: read
     steps:
       - name: AI PR Review
-        uses: yourusername/pr-reviewer-action@v1
+        uses: meetgeetha/pr-reviewer-action@main
         with:
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+
+#### Branch selection
+
+- **Stable (`main`)** – default workflow with conservative reviewer behavior:
+  ```yaml
+  uses: meetgeetha/pr-reviewer-action@main
+  ```
+- **Agentic (`agentic_ai_v2`)** – experimental reviewer with deeper autonomous fixes:
+  ```yaml
+  uses: meetgeetha/pr-reviewer-action@agentic_ai_v2
+  ```
+  Make sure to reference the branch that matches the level of automation you want.
 ```
 
 ## Setup
@@ -42,6 +54,8 @@ jobs:
 4. Create a PR and watch the magic happen! ✨
 
 **Important**: The `permissions` block is required for the action to post comments on PRs. Without it, you'll get a 403 "Resource not accessible by integration" error.
+
+> **Agentic AI branch**: If you use the agentic workflow variant, change the `uses` line to `meetgeetha/pr-reviewer-action@agentic_ai_v2`.
 
 ## Troubleshooting
 
@@ -61,7 +75,7 @@ If you're getting a 403 error when the action tries to post comments:
 3. **Fork PRs**: If the PR is from a fork, `GITHUB_TOKEN` has limited permissions. You may need to use a Personal Access Token (PAT) with `repo` scope instead:
    ```yaml
    - name: AI PR Review
-     uses: yourusername/pr-reviewer-action@v1
+     uses: meetgeetha/pr-reviewer-action@main
      with:
        openai_api_key: ${{ secrets.OPENAI_API_KEY }}
        github_token: ${{ secrets.PAT_TOKEN }}  # Use PAT instead of GITHUB_TOKEN

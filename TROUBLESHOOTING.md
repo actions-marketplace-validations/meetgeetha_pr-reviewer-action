@@ -32,6 +32,11 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
+> **Branch selection**:
+> - Stable workflow: `meetgeetha/pr-reviewer-action@main`
+> - Agentic workflow: `meetgeetha/pr-reviewer-action@agentic_ai_v2`
+>   (swap the branch reference everywhere the action appears in your workflow)
+
 **Important**: The `permissions` block must be under the `job` (not under `steps`).
 
 ### Solution 2: Check Repository Settings
@@ -148,6 +153,8 @@ jobs:
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+> Need the agentic workflow? Replace `@main` with `@agentic_ai_v2` in the snippet above.
 
 Save this as `.github/workflows/pr-review.yml` in your repository root.
 
