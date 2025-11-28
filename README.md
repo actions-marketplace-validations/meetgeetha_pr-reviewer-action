@@ -18,12 +18,12 @@
 ## 🤖 Features
 
 - **AI-Powered Reviews**: Uses GPT-4 for intelligent code analysis and suggestions
-- **RAG Enhancement**: Learns from past reviews and best practices using Retrieval-Augmented Generation
+- **Simple Setup**: Easy integration with minimal configuration
 - **Comprehensive Analysis**: Checks for bugs, security vulnerabilities, performance issues, and code style
 - **Detailed Feedback**: Provides actionable suggestions with severity levels (High/Medium/Low)
-- **Fast Performance**: ~70ms overhead with local embeddings for RAG context
+- **Fast Performance**: Quick analysis with efficient processing
 - **Multi-Language Support**: Works with Python, JavaScript, TypeScript, Java, Go, Rust, and more
-- **GitHub & GitLab**: Supports both GitHub and GitLab platforms
+- **GitHub Integration**: Native GitHub Actions support
 - **Customizable**: Configurable review depth and model selection
 
 ## 🚀 Quick Start
@@ -131,16 +131,8 @@ The action runs on these pull request events:
 
 1. **PR Detection**: Action triggers on pull request events
 2. **Code Analysis**: Fetches PR diff and analyzes changed files
-3. **RAG Context**: Retrieves relevant best practices and past review patterns
-4. **AI Review**: GPT-4 analyzes code with context-aware suggestions
-5. **Comment Posting**: Posts detailed review comments on the PR
-
-### RAG (Retrieval-Augmented Generation)
-
-The action uses RAG to enhance reviews with:
-- **Best Practices**: Pre-seeded knowledge base with coding best practices
-- **Context Awareness**: Retrieves relevant patterns based on code changes
-- **Consistency**: Learns from past reviews to maintain consistent feedback
+3. **AI Review**: GPT-4 analyzes code and provides intelligent suggestions
+4. **Comment Posting**: Posts detailed review comments on the PR
 
 ### Review Categories
 
