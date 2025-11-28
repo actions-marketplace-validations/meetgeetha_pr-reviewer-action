@@ -85,24 +85,7 @@ That's it! The action will automatically review your PR and post comments with d
 
 ## 📖 Usage
 
-### Basic Usage
-
 The action runs automatically on pull requests. Make sure to include the required permissions:
-
-```yaml
-jobs:
-  review:
-    runs-on: ubuntu-latest
-    permissions:
-      issues: write
-      pull-requests: read
-    steps:
-      - uses: meetgeetha/pr-reviewer-action@v1
-        with:
-          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
-```
-
-### Advanced Usage
 
 ```yaml
 jobs:
