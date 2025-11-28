@@ -293,25 +293,8 @@ class GitHubService:
         # Summary section
         if review_result.get("summary"):
             comment += f"### Summary\n{review_result['summary']}\n\n"
-        
-        # Overall score
-        score = review_result.get("overall_score", 0)
-        if score >= 90:
-            score_emoji = "✅"
-            score_text = "Excellent"
-        elif score >= 75:
-            score_emoji = "👍"
-            score_text = "Good"
-        elif score >= 60:
-            score_emoji = "⚠️"
-            score_text = "Needs Improvement"
-        else:
-            score_emoji = "❌"
-            score_text = "Critical Issues"
-        
-        comment += f"**Overall Code Quality:** {score_emoji} **{score}/100** ({score_text})\n\n"
 
-        # Issues Found section with enhanced details
+        # Issues Found section (simplified format to match README)
         if review_result.get("issues"):
             comment += "### Issues Found\n\n"
             for issue in review_result["issues"]:
@@ -321,25 +304,25 @@ class GitHubService:
                     "🔴" if severity == "HIGH" else "🟡" if severity == "MEDIUM" else "🔵"
                 )
                 
-                # Issue header
+                # Issue header (matches README format)
                 comment += f"{emoji} **{severity}**: {issue.get('message')}\n"
                 
-                # Location details
+                # Location (simplified format)
                 file_path = issue.get('file', '')
                 line_num = issue.get('line', '')
                 if file_path:
-                    location = f"   - **Location:** `{file_path}`"
+                    location = f"   - Location: `{file_path}`"
                     if line_num:
-                        location += f":line {line_num}"
+                        location += f":{line_num}"
                     comment += location + "\n"
                 
-                # Category/Risk
-                if category != "General":
-                    comment += f"   - **Category:** {category}\n"
+                # Risk/Category (simplified)
+                if category and category.lower() != "general":
+                    comment += f"   - Risk: {category} vulnerability\n"
                 
-                # Suggestion for this specific issue
+                # Suggestion (simplified)
                 if issue.get('suggestion'):
-                    comment += f"   - **Suggestion:** {issue.get('suggestion')}\n"
+                    comment += f"   - Suggestion: {issue.get('suggestion')}\n"
                 
                 comment += "\n"
 
@@ -351,37 +334,20 @@ class GitHubService:
                     comment += f"**`{file_issue['file']}`** (line {file_issue['line']}): {file_issue.get('message', '')}\n"
             comment += "\n"
 
-        # Suggestions section with better formatting
+        # Suggestions section (simplified format to match README)
         if review_result.get("suggestions"):
-            comment += "### Suggestions\n\n"
+            comment += "### Suggestions\n"
             for suggestion in review_result["suggestions"]:
-                # Check if suggestion is a dict with more details
+                # Simple bullet format like README example
                 if isinstance(suggestion, dict):
-                    comment += f"- **{suggestion.get('title', 'Improvement')}:** {suggestion.get('description', '')}\n"
+                    comment += f"- {suggestion.get('description', suggestion.get('title', ''))}\n"
                 else:
                     comment += f"- {suggestion}\n"
             comment += "\n"
         
-        # Statistics summary
-        issues_count = len(review_result.get("issues", []))
-        suggestions_count = len(review_result.get("suggestions", []))
-        if issues_count > 0 or suggestions_count > 0:
-            comment += "### Review Statistics\n\n"
-            comment += f"- **Total Issues:** {issues_count}\n"
-            if issues_count > 0:
-                high_count = sum(1 for i in review_result.get("issues", []) if i.get("severity", "").upper() == "HIGH")
-                medium_count = sum(1 for i in review_result.get("issues", []) if i.get("severity", "").upper() == "MEDIUM")
-                low_count = sum(1 for i in review_result.get("issues", []) if i.get("severity", "").upper() == "LOW")
-                if high_count > 0:
-                    comment += f"  - 🔴 High Priority: {high_count}\n"
-                if medium_count > 0:
-                    comment += f"  - 🟡 Medium Priority: {medium_count}\n"
-                if low_count > 0:
-                    comment += f"  - 🔵 Low Priority: {low_count}\n"
-            comment += f"- **Total Suggestions:** {suggestions_count}\n\n"
-
+        # Simple footer like README example
         comment += (
-            "\n---\n*This review was generated automatically by the PR Reviewer Bot*"
+            "---\n*This review was generated automatically by the PR Reviewer Bot*"
         )
 
         return comment
