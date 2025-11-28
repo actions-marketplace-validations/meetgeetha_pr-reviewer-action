@@ -73,7 +73,7 @@ Please analyze this code for:
 4. **Performance**: Identify potential performance bottlenecks or inefficiencies
 5. **Style and Standards**: Check compliance with coding standards and conventions
 
-Provide your response in the following JSON format:
+Provide your response ONLY as a valid JSON object in this exact format (NO markdown, NO code blocks, NO additional text):
 {{
     "issues": [
         {{
@@ -90,12 +90,16 @@ Provide your response in the following JSON format:
     ]
 }}
 
-IMPORTANT:
+CRITICAL REQUIREMENTS:
+- Return ONLY the JSON object - no explanatory text before or after
+- Do NOT wrap the JSON in markdown code blocks (no ``` characters)
+- Do NOT include any text outside the JSON structure
 - Be specific and actionable in your feedback
 - Include line numbers whenever possible
 - For each issue, provide a concrete suggestion on how to fix it
 - Prioritize critical security and bug issues as 'high' severity
-- Keep messages concise but informative""",
+- Keep messages concise but informative
+- Ensure the JSON is valid and parseable""",
         )
 
         # Summary generation prompt
@@ -171,12 +175,29 @@ Keep it professional and constructive.""",
 
             # Parse result (assuming JSON response)
             import json
+            import re
 
             try:
+                # Try parsing as-is first
                 analysis = json.loads(result)
             except json.JSONDecodeError:
-                # Fallback if LLM doesn't return valid JSON
-                analysis = {"issues": [], "suggestions": [result]}
+                # Try extracting JSON from markdown code blocks
+                try:
+                    # Look for JSON in code blocks: ```json ... ``` or ``` ... ```
+                    json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', result, re.DOTALL)
+                    if json_match:
+                        analysis = json.loads(json_match.group(1))
+                    else:
+                        # Try finding raw JSON object
+                        json_match = re.search(r'(\{.*\})', result, re.DOTALL)
+                        if json_match:
+                            analysis = json.loads(json_match.group(1))
+                        else:
+                            # Last resort: treat as plain text suggestion
+                            analysis = {"issues": [], "suggestions": [result]}
+                except (json.JSONDecodeError, AttributeError):
+                    # If all parsing fails, return as plain text
+                    analysis = {"issues": [], "suggestions": [result]}
 
             return analysis
 
