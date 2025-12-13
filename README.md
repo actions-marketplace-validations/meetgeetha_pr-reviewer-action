@@ -61,7 +61,7 @@ jobs:
           fetch-depth: 0
       
       - name: AI PR Review
-        uses: meetgeetha/pr-reviewer-action@main
+        uses: devopsgeetha/pr-reviewer-action@main
         with:
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -72,15 +72,15 @@ jobs:
 
 - **Stable (`main`)** – default reviewer profile:
   ```yaml
-  uses: meetgeetha/pr-reviewer-action@main
+  uses: devopsgeetha/pr-reviewer-action@main
   ```
 - **Agentic (`agentic_ai_v2`)** – experimental agent with deeper autonomy:
   ```yaml
-  uses: meetgeetha/pr-reviewer-action@agentic_ai_v2
+  uses: devopsgeetha/pr-reviewer-action@agentic_ai_v2
   ```
   Choose the branch that matches the behavior you want before copying the workflow.
 
-> **Agentic AI branch**: If you need the agentic workflow variant, set the `uses` line to `meetgeetha/pr-reviewer-action@agentic_ai_v2`.
+> **Agentic AI branch**: If you need the agentic workflow variant, set the `uses` line to `devopsgeetha/pr-reviewer-action@agentic_ai_v2`.
 
 ### 3. Add Your API Key to Secrets
 
@@ -108,7 +108,7 @@ jobs:
       issues: write
       pull-requests: read
     steps:
-      - uses: meetgeetha/pr-reviewer-action@main
+      - uses: devopsgeetha/pr-reviewer-action@main
         with:
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}  # Optional, defaults to GITHUB_TOKEN
@@ -227,7 +227,7 @@ that should be addressed.
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/meetgeetha/pr-reviewer-action.git
+   git clone https://github.com/devopsgeetha/pr-reviewer-action.git
    cd pr-reviewer-action
    ```
 
@@ -336,8 +336,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 💬 Support
 
-- **Issues**: [GitHub Issues](https://github.com/meetgeetha/pr-reviewer-action/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/meetgeetha/pr-reviewer-action/discussions)
+- **Issues**: [GitHub Issues](https://github.com/devopsgeetha/pr-reviewer-action/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/devopsgeetha/pr-reviewer-action/discussions)
 
 ## ⭐ Star History
 
@@ -347,8 +347,9 @@ If you find this project useful, please consider giving it a star! ⭐
 
 <div align="center">
 
-**Made with ❤️ by [Geethakrishnan Balasubramanian](https://github.com/meetgeetha)**
+**Made with ❤️ by [Geethakrishnan Balasubramanian](https://github.com/devopsgeetha)**
 
-[Report Bug](https://github.com/meetgeetha/pr-reviewer-action/issues) • [Request Feature](https://github.com/meetgeetha/pr-reviewer-action/issues)
+[Report Bug](https://github.com/devopsgeetha/pr-reviewer-action/issues) • [Request Feature](https://github.com/devopsgeetha/pr-reviewer-action/issues)
 
 </div>
+

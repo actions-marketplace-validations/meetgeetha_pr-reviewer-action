@@ -26,15 +26,15 @@ jobs:
         uses: actions/checkout@v3
       
       - name: AI PR Review
-        uses: meetgeetha/pr-reviewer-action@main
+        uses: devopsgeetha/pr-reviewer-action@main
         with:
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 > **Branch selection**:
-> - Stable workflow: `meetgeetha/pr-reviewer-action@main`
-> - Agentic workflow: `meetgeetha/pr-reviewer-action@agentic_ai_v2`
+> - Stable workflow: `devopsgeetha/pr-reviewer-action@main`
+> - Agentic workflow: `devopsgeetha/pr-reviewer-action@agentic_ai_v2`
 >   (swap the branch reference everywhere the action appears in your workflow)
 
 **Important**: The `permissions` block must be under the `job` (not under `steps`).
@@ -67,7 +67,7 @@ If the PR is from a **fork** (not from the same repository), `GITHUB_TOKEN` has 
 3. Update your workflow to use the PAT:
    ```yaml
    - name: AI PR Review
-     uses: meetgeetha/pr-reviewer-action@main
+     uses: devopsgeetha/pr-reviewer-action@main
      with:
        openai_api_key: ${{ secrets.OPENAI_API_KEY }}
        github_token: ${{ secrets.PAT_TOKEN }}  # Use PAT instead
@@ -148,7 +148,7 @@ jobs:
       pull-requests: read
     steps:
       - name: AI PR Review
-        uses: meetgeetha/pr-reviewer-action@main
+        uses: devopsgeetha/pr-reviewer-action@main
         with:
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -157,4 +157,5 @@ jobs:
 > Need the agentic workflow? Replace `@main` with `@agentic_ai_v2` in the snippet above.
 
 Save this as `.github/workflows/pr-review.yml` in your repository root.
+
 

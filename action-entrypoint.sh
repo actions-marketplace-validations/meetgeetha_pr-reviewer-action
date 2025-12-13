@@ -81,7 +81,7 @@ fi
 
 echo "   📌 Final PR number: ${PR_NUMBER}"
 
-REPO="${GITHUB_REPOSITORY:-meetgeetha/pr-reviewer-action}"
+REPO="${GITHUB_REPOSITORY:-devopsgeetha/pr-reviewer-action}"
 
 # Export variables for Python (ensure they're set)
 export PR_NUMBER="${PR_NUMBER}"
@@ -113,9 +113,9 @@ github_service = GitHubService()
 review_service = ReviewService(rag_service=rag_service)
 
 # Get PR data
-repo_str = os.environ.get('GITHUB_REPOSITORY', 'meetgeetha/pr-reviewer-action')
+repo_str = os.environ.get('GITHUB_REPOSITORY', 'devopsgeetha/pr-reviewer-action')
 if '/' not in repo_str:
-    repo_str = 'meetgeetha/pr-reviewer-action'  # Default for testing
+    repo_str = 'devopsgeetha/pr-reviewer-action'  # Default for testing
 owner, repo = repo_str.split('/')
 
 # Get PR number - try multiple sources
@@ -182,3 +182,4 @@ except Exception as e:
         print('❌ Error: ' + error_msg)
         raise
 PYTHON_SCRIPT
+
