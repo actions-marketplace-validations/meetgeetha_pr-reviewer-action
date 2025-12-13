@@ -154,17 +154,62 @@ class ReviewService:
             code=patch, filename=filename, language=language
         )
 
+        # Debug: Show what LLM returned
+        print(f"   Debug LLM analysis for {filename}: {len(analysis.get('issues', []))} total issues")
+        
         # Separate issues with line numbers from general issues
         general_issues = []
         file_issues = []
         
-        for issue in analysis.get("issues", []):
+        for i, issue in enumerate(analysis.get("issues", [])):
+            has_line = bool(issue.get("line"))
+            has_file = bool(issue.get("file"))
+            print(f"   Debug issue {i+1}: line={issue.get('line')}, file={issue.get('file')}, has_line={has_line}, has_file={has_file}")
+            
             if issue.get("line") and issue.get("file"):
                 # This is a line-specific issue
                 file_issues.append(issue)
+                print(f"   -> Added to file_issues")
             else:
+                # Try to infer line numbers from diff context for critical issues
+                if issue.get("severity") in ["high", "critical"] and not issue.get("line"):
+                    inferred_line = self._try_infer_line_from_patch(patch, issue.get("message", ""))
+                    if inferred_line:
+                        issue["line"] = inferred_line
+                        issue["file"] = filename
+                        file_issues.append(issue)
+                        print(f"   -> Inferred line {inferred_line}, added to file_issues")
+                        continue
+                
                 # This is a general issue for the file
                 general_issues.append(issue)
+                print(f"   -> Added to general_issues")
+        
+        print(f"   Debug result: {len(general_issues)} general, {len(file_issues)} file-specific issues")
+        
+        # Aggressive fallback: If no file_issues but have general issues, try to convert them
+        if len(file_issues) == 0 and len(general_issues) > 0:
+            print("   No file_issues found, attempting to convert general issues to file_issues")
+            promoted_issues = []
+            remaining_general = []
+            
+            for issue in general_issues:
+                # Try to infer line number for high/medium severity issues
+                if issue.get("severity") in ["high", "medium"]:
+                    inferred_line = self._try_infer_line_from_patch(patch, issue.get("message", ""))
+                    if inferred_line:
+                        issue["line"] = inferred_line
+                        issue["file"] = filename
+                        promoted_issues.append(issue)
+                        print(f"   -> Promoted general issue to file_issue at line {inferred_line}")
+                        continue
+                
+                remaining_general.append(issue)
+            
+            # Update the lists
+            general_issues = remaining_general
+            file_issues = promoted_issues
+            print(f"   After promotion: {len(general_issues)} general, {len(file_issues)} file-specific issues")
         
         return {
             "issues": general_issues,
@@ -183,6 +228,41 @@ class ReviewService:
         }
 
         return self.llm_service.generate_summary(context, review_result)
+
+    def _try_infer_line_from_patch(self, patch: str, issue_message: str) -> Optional[int]:
+        """
+        Try to infer line number from patch context for critical issues
+        This is a fallback when LLM doesn't provide line numbers
+        """
+        if not patch or not issue_message:
+            return None
+        
+        import re
+        
+        # Look for @@ -X,Y +A,B @@ headers to find line numbers
+        hunk_matches = re.findall(r'@@\s*-\d+(?:,\d+)?\s*\+(\d+)(?:,\d+)?\s*@@', patch)
+        if not hunk_matches:
+            return None
+        
+        # Get the first line number of new code
+        try:
+            start_line = int(hunk_matches[0])
+            
+            # Count + lines to estimate where the issue might be
+            lines = patch.split('\n')
+            added_line_count = 0
+            for line in lines:
+                if line.startswith('+') and not line.startswith('+++'):
+                    added_line_count += 1
+                    # For critical issues, assume they're in the first few added lines
+                    if added_line_count <= 3:
+                        return start_line + added_line_count - 1
+            
+            # If we can't be specific, return the start line
+            return start_line if added_line_count > 0 else None
+            
+        except (ValueError, IndexError):
+            return None
 
     def _calculate_score(self, review_result: Dict) -> int:
         """Calculate overall code quality score"""

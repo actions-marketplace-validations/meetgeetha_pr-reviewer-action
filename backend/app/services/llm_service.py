@@ -61,14 +61,20 @@ Analyze the following code changes and provide a detailed review.
 Filename: {filename}
 Language: {language}
 
-Code Changes:
+Code Changes (Git Diff Format):
 ```
 {code}
 ```
 
+**IMPORTANT**: The above is a git diff. Lines starting with + are additions, lines with - are deletions.
+Focus your analysis on the + lines (new/changed code). For line numbers:
+- If you see "@@ -X,Y +A,B @@", the new lines start at line A
+- Count the + lines from that starting point to determine specific line numbers
+- Only report line numbers for + lines (new/added code)
+
 Please analyze this code for:
 1. **Bugs and Errors**: Identify potential bugs, logic errors, or runtime issues
-2. **Security Vulnerabilities**: Check for security flaws, injection risks, or unsafe practices
+2. **Security Vulnerabilities**: Check for security flaws, injection risks, or unsafe practices  
 3. **Code Quality**: Assess code readability, maintainability, and adherence to best practices
 4. **Performance**: Identify potential performance bottlenecks or inefficiencies
 5. **Style and Standards**: Check compliance with coding standards and conventions
@@ -80,7 +86,7 @@ Provide your response ONLY as a valid JSON object in this exact format (NO markd
             "severity": "high|medium|low",
             "category": "bug|security|quality|performance|style",
             "message": "Brief description of the issue",
-            "line": line_number_if_applicable,
+            "line": actual_line_number_in_new_file,
             "file": "{filename}",
             "suggestion": "Specific recommendation to fix this issue"
         }}
@@ -92,12 +98,20 @@ Provide your response ONLY as a valid JSON object in this exact format (NO markd
 
 CRITICAL REQUIREMENTS:
 - Return ONLY the JSON object - no explanatory text before or after
-- Do NOT wrap the JSON in markdown code blocks (no ``` characters)
+- Do NOT wrap the JSON in markdown code blocks (no ``` characters)  
 - Do NOT include any text outside the JSON structure
 - Be specific and actionable in your feedback
-- Include line numbers whenever possible
-- For each issue, provide a concrete suggestion on how to fix it
+- **MANDATORY**: Every issue MUST have both "line" and "file" fields filled
+- For "line": Count from the @@ +A,B @@ marker - A is starting line, count + lines from there
+- For "file": Always use exactly: {filename}
+- If you can't determine exact line numbers, use your best estimate from the + lines
+- Even for general issues, try to associate them with a specific line of new code
 - Prioritize critical security and bug issues as 'high' severity
+- Provide a concrete suggestion on how to fix each issue
+
+EXAMPLE LINE COUNTING:
+If you see "@@ -10,5 +10,8 @@", new lines start at line 10.
+If there are 3 + lines, they would be approximately lines 10, 11, 12.
 - Keep messages concise but informative
 - Ensure the JSON is valid and parseable""",
         )

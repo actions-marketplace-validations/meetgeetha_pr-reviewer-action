@@ -309,8 +309,19 @@ class GitHubService:
             # Create inline comments from review results
             inline_comments = self._create_inline_comments(review_result)
             
+            # Debug: Show what we have in review_result
+            print(f"   Debug: file_issues count: {len(review_result.get('file_issues', []))}")
+            print(f"   Debug: general issues count: {len(review_result.get('issues', []))}")
+            
+            # Show sample of file_issues for debugging
+            if review_result.get('file_issues'):
+                for i, issue in enumerate(review_result['file_issues'][:2]):  # Show first 2
+                    print(f"   Debug file_issue {i+1}: file={issue.get('file')}, line={issue.get('line')}, message={issue.get('message', '')[:50]}...")
+            
             if not inline_comments:
                 print("ℹ️  No inline comments to post (no file-specific issues with line numbers)")
+                print("   This usually means the LLM didn't generate issues with specific line numbers.")
+                print("   The review will fall back to a general comment instead.")
                 return
                 
             print(f"   Found {len(inline_comments)} inline comments to post")
@@ -357,6 +368,21 @@ class GitHubService:
                 # Log details of posted comments
                 for i, comment in enumerate(inline_comments, 1):
                     print(f"   Comment {i}: {comment['path']}:{comment['line']}")
+                
+            elif response.status_code == 422:
+                # Validation error - often means line numbers are invalid
+                error_data = response.json() if response.text else {}
+                error_msg = error_data.get("message", "Unprocessable Entity")
+                print(f"❌ GitHub API validation error (422): {error_msg}")
+                print(f"   This usually means line numbers are invalid or don't exist in the diff")
+                print(f"   Response: {response.text[:500]}")
+                
+                # Try to extract which comment failed
+                errors = error_data.get("errors", [])
+                for error in errors:
+                    print(f"   Error detail: {error}")
+                
+                raise Exception(f"GitHub API validation error: {error_msg}")
                 
             elif response.status_code == 403:
                 error_data = response.json() if response.text else {}
@@ -542,9 +568,15 @@ class GitHubService:
                 if issue.get("category"):
                     comment_body += f"\n\n🏷️ **Category**: {issue['category']}"
                 
+                # Validate line number
+                line_num = int(issue["line"])
+                if line_num <= 0 or line_num > 10000:  # Reasonable bounds
+                    print(f"   Warning: Invalid line number {line_num} for {issue['file']}, skipping inline comment")
+                    continue
+                
                 comments.append({
                     "path": issue["file"],
-                    "line": int(issue["line"]),  # Ensure it's an integer
+                    "line": line_num,
                     "body": comment_body,
                 })
         
@@ -570,9 +602,15 @@ class GitHubService:
                 if issue.get("category"):
                     comment_body += f"\n\n🏷️ **Category**: {issue['category']}"
                 
+                # Validate line number  
+                line_num = int(issue["line"])
+                if line_num <= 0 or line_num > 10000:  # Reasonable bounds
+                    print(f"   Warning: Invalid line number {line_num} for {issue['file']}, skipping inline comment")
+                    continue
+                
                 comments.append({
                     "path": issue["file"],
-                    "line": int(issue["line"]),
+                    "line": line_num,
                     "body": comment_body,
                 })
 
