@@ -319,10 +319,42 @@ class GitHubService:
                     print(f"   Debug file_issue {i+1}: file={issue.get('file')}, line={issue.get('line')}, message={issue.get('message', '')[:50]}...")
             
             if not inline_comments:
-                print("ℹ️  No inline comments to post (no file-specific issues with line numbers)")
-                print("   This usually means the LLM didn't generate issues with specific line numbers.")
-                print("   The review will fall back to a general comment instead.")
-                return
+                print("⚠️  No inline comments to post (no file-specific issues with line numbers)")
+                print("   Attempting to create inline comments from general issues...")
+                
+                # Try to create inline comments from general issues by placing them on first changed line
+                # Get the PR diff to find changed lines
+                try:
+                    diff_data = self.get_pr_diff(pr_data)
+                    general_issues = review_result.get("issues", [])
+                    
+                    if general_issues and diff_data.get("files"):
+                        # Find the first file with changes
+                        first_file = diff_data["files"][0] if diff_data["files"] else None
+                        if first_file:
+                            file_path = first_file.get("filename", "")
+                            # Try to get line numbers from the file diff
+                            file_patch = first_file.get("patch", "")
+                            if file_patch:
+                                # Extract first added line from patch
+                                import re
+                                hunk_match = re.search(r'@@\s*-\d+(?:,\d+)?\s*\+(\d+)(?:,\d+)?\s*@@', file_patch)
+                                if hunk_match:
+                                    first_line = int(hunk_match.group(1))
+                                    # Create inline comments for top 3 general issues
+                                    for idx, issue in enumerate(general_issues[:3]):
+                                        inline_comments.append({
+                                            "path": file_path,
+                                            "line": first_line + idx,  # Space them out
+                                            "body": f"**{issue.get('severity', 'info').upper()}**: {issue.get('message', '')}"
+                                        })
+                                    print(f"   Created {len(inline_comments)} inline comments from general issues")
+                except Exception as e:
+                    print(f"   Could not create inline comments from general issues: {e}")
+                
+                if not inline_comments:
+                    print("   Falling back to general comment instead.")
+                    return
                 
             print(f"   Found {len(inline_comments)} inline comments to post")
             for i, comment in enumerate(inline_comments):
