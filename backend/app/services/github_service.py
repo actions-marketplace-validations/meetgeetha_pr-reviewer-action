@@ -325,6 +325,9 @@ class GitHubService:
                 return
                 
             print(f"   Found {len(inline_comments)} inline comments to post")
+            for i, comment in enumerate(inline_comments):
+                print(f"   Comment {i+1}: {comment['path']} line {comment['line']}")
+                print(f"      Body preview: {comment['body'][:100]}...")
             
             # Create review body with summary
             review_body = self._create_review_summary(review_result)
@@ -568,24 +571,31 @@ class GitHubService:
                 if issue.get("category"):
                     comment_body += f"\n\n🏷️ **Category**: {issue['category']}"
                 
-                # Validate line number
+                # Validate and convert line number
                 line_num = int(issue["line"])
                 if line_num <= 0 or line_num > 10000:  # Reasonable bounds
                     print(f"   Warning: Invalid line number {line_num} for {issue['file']}, skipping inline comment")
                     continue
                 
-                comments.append({
+                # Create comment with proper format for GitHub PR Review API
+                comment = {
                     "path": issue["file"],
-                    "line": line_num,
                     "body": comment_body,
-                })
+                }
+                
+                # Use 'line' for single-line comments on the right side of diff
+                # This should be the line number in the new version of the file
+                comment["line"] = line_num
+                
+                comments.append(comment)
+                print(f"   Created inline comment: {issue['file']}:{line_num}")
         
         # Also process general issues that have file/line info
         for issue in review_result.get("issues", []):
             if issue.get("line") and issue.get("file"):
                 # Skip if already processed in file_issues
                 existing = any(
-                    c["path"] == issue["file"] and c["line"] == int(issue["line"])
+                    c["path"] == issue["file"] and c.get("line") == int(issue["line"])
                     for c in comments
                 )
                 if existing:
@@ -608,10 +618,13 @@ class GitHubService:
                     print(f"   Warning: Invalid line number {line_num} for {issue['file']}, skipping inline comment")
                     continue
                 
-                comments.append({
+                comment = {
                     "path": issue["file"],
-                    "line": line_num,
                     "body": comment_body,
-                })
+                    "line": line_num
+                }
+                
+                comments.append(comment)
+                print(f"   Created inline comment: {issue['file']}:{line_num}")
 
         return comments

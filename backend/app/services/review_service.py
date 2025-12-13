@@ -233,9 +233,13 @@ class ReviewService:
         """
         Try to infer line number from patch context for critical issues
         This is a fallback when LLM doesn't provide line numbers
+        Returns a line number that should exist in the new version of the file
         """
         if not patch or not issue_message:
             return None
+        
+        print(f"   Analyzing patch for issue '{issue_message[:50]}...'")
+        print(f"   Patch sample: {patch[:200]}...")
         
         import re
         
@@ -244,24 +248,47 @@ class ReviewService:
         if not hunk_matches:
             return None
         
-        # Get the first line number of new code
         try:
-            start_line = int(hunk_matches[0])
-            
-            # Count + lines to estimate where the issue might be
+            # Get all hunks and their starting line numbers
             lines = patch.split('\n')
-            added_line_count = 0
+            current_new_line = None
+            added_lines = []
+            
             for line in lines:
-                if line.startswith('+') and not line.startswith('+++'):
-                    added_line_count += 1
-                    # For critical issues, assume they're in the first few added lines
-                    if added_line_count <= 3:
-                        return start_line + added_line_count - 1
+                # Track hunk headers
+                hunk_match = re.match(r'@@\s*-\d+(?:,\d+)?\s*\+(\d+)(?:,\d+)?\s*@@', line)
+                if hunk_match:
+                    current_new_line = int(hunk_match.group(1))
+                    continue
+                
+                if current_new_line is not None:
+                    if line.startswith('+') and not line.startswith('+++'):
+                        # This is an added line
+                        added_lines.append(current_new_line)
+                        current_new_line += 1
+                    elif line.startswith('-'):
+                        # Deleted line - don't increment new line counter
+                        continue
+                    elif line.startswith(' '):
+                        # Context line - increment new line counter
+                        current_new_line += 1
             
-            # If we can't be specific, return the start line
-            return start_line if added_line_count > 0 else None
+            # Return the first added line if we have any
+            if added_lines:
+                print(f"   Found {len(added_lines)} added lines: {added_lines[:5]}...")
+                # Return middle line if we have multiple, otherwise first
+                if len(added_lines) > 2:
+                    return added_lines[len(added_lines) // 2]
+                return added_lines[0]
             
-        except (ValueError, IndexError):
+            # If no added lines found, try to return a reasonable line number
+            if hunk_matches:
+                return int(hunk_matches[0])
+            
+            return None
+            
+        except (ValueError, IndexError) as e:
+            print(f"   Error inferring line number: {e}")
             return None
 
     def _calculate_score(self, review_result: Dict) -> int:
