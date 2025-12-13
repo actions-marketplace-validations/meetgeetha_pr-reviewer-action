@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Force rebuild - v1.0.1 (fixes 403 error and LangChain deprecations)
+# Force rebuild - v1.0.2 (fixes missing _detect_language and _format_review_comment methods)
 
 # Copy backend code
 COPY backend/requirements.txt .

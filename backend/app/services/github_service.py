@@ -14,6 +14,26 @@ class GitHubService:
     def __init__(self):
         self.token = os.getenv("GITHUB_TOKEN")
         self.client = Github(self.token) if self.token else None
+    
+    def _detect_language(self, filename: str) -> str:
+        """Detect programming language from filename"""
+        extensions = {
+            ".py": "python",
+            ".js": "javascript",
+            ".ts": "typescript",
+            ".java": "java",
+            ".cpp": "cpp",
+            ".c": "c",
+            ".go": "go",
+            ".rb": "ruby",
+            ".php": "php",
+            ".swift": "swift",
+            ".kt": "kotlin",
+            ".rs": "rust",
+        }
+
+        ext = os.path.splitext(filename)[1].lower()
+        return extensions.get(ext, "unknown")
         
     def _check_token_permissions(self, repo_name: str) -> Dict[str, Any]:
         """
@@ -576,3 +596,71 @@ class GitHubService:
                 skipped_comments.append(comment_data)
 
         return valid_comments, skipped_comments
+    
+    def _format_review_comment(self, review_result: Dict, include_inline: bool = False) -> str:
+        """Format the review result into a markdown comment"""
+        comment = "## 🤖 Automated Code Review\n\n"
+
+        if review_result.get("summary"):
+            comment += f"### Summary\n{review_result['summary']}\n\n"
+
+        # Overall score
+        score = review_result.get("overall_score", 0)
+        if score > 0:
+            if score >= 85:
+                emoji = "✅"
+                status = "Great job!"
+            elif score >= 70:
+                emoji = "🟡"
+                status = "Good work with room for improvement"
+            else:
+                emoji = "🔴"
+                status = "Needs attention"
+            comment += f"### {emoji} Overall Score: {score}/100\n{status}\n\n"
+
+        # General issues
+        if review_result.get("issues"):
+            comment += "### Issues Found\n\n"
+            for issue in review_result["issues"]:
+                severity = issue.get("severity", "info").upper()
+                emoji = (
+                    "🔴" if severity == "HIGH" else "🟡" if severity == "MEDIUM" else "🔵"
+                )
+                comment += f"{emoji} **{severity}**: {issue.get('message')}\n"
+                if issue.get("file"):
+                    comment += f"   - Location: `{issue.get('file')}"
+                    if issue.get("line"):
+                        comment += f":{issue.get('line')}"
+                    comment += "`\n"
+                if issue.get("suggestion"):
+                    comment += f"   - 💡 Suggestion: {issue.get('suggestion')}\n"
+            comment += "\n"
+
+        # File-specific issues (if not using inline comments)
+        if not include_inline and review_result.get("file_issues"):
+            comment += "### File-Specific Issues\n\n"
+            for issue in review_result["file_issues"]:
+                severity = issue.get("severity", "info").upper()
+                emoji = (
+                    "🔴" if severity == "HIGH" else "🟡" if severity == "MEDIUM" else "🔵"
+                )
+                file_path = issue.get("file", "unknown")
+                line = issue.get("line", "?")
+                comment += f"{emoji} **{severity}** in `{file_path}:{line}`\n"
+                comment += f"   {issue.get('message')}\n"
+                if issue.get("suggestion"):
+                    comment += f"   💡 Suggestion: {issue.get('suggestion')}\n"
+            comment += "\n"
+
+        # Suggestions
+        if review_result.get("suggestions"):
+            comment += "### Suggestions\n\n"
+            for suggestion in review_result["suggestions"]:
+                comment += f"- {suggestion}\n"
+            comment += "\n"
+
+        comment += (
+            "\n---\n*This review was generated automatically by the PR Reviewer Bot*"
+        )
+
+        return comment
