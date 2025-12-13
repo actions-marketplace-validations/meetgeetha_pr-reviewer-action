@@ -162,8 +162,13 @@ try:
     result = review_service.analyze_code(diff_data)
     print(f'💬 Posting review comment...')
     
+    # Check comment mode (inline vs general)
+    comment_mode = os.environ.get('COMMENT_MODE', 'inline').lower()
+    use_inline = comment_mode == 'inline'
+    print(f'   Comment mode: {comment_mode} (use_inline={use_inline})')
+    
     # Post review as comment
-    github_service.post_review_comments(pr_data, result)
+    github_service.post_review_comments(pr_data, result, use_inline=use_inline)
     print('✅ Review posted successfully')
 except Exception as e:
     error_msg = str(e)

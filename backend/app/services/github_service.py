@@ -124,14 +124,16 @@ class GitHubService:
         except Exception as e:
             raise Exception(f"Error getting PR diff: {str(e)}")
 
-    def post_review_comments(self, pr_data: Dict, review_result: Dict) -> None:
+    def post_review_comments(self, pr_data: Dict, review_result: Dict, use_inline: bool = True) -> None:
         """
-        Post review comments to a pull request as an issue comment
-        Requires 'issues: write' permission in the workflow
-
+        Post review comments to a pull request
+        
         Args:
             pr_data: Pull request data from webhook
             review_result: Analysis results from LLM
+            use_inline: If True, post as inline review comments. If False, post as issue comment
+                       Inline comments require 'pull-requests: write' permission
+                       Issue comments require 'issues: write' permission
         """
         try:
             repo_name = pr_data["base"]["repo"]["full_name"]
@@ -140,12 +142,32 @@ class GitHubService:
             print(f"📝 Preparing to post review comment...")
             print(f"   Repository: {repo_name}")
             print(f"   PR Number: {pr_number}")
+            print(f"   Mode: {'Inline comments' if use_inline else 'General comment'}")
             
             # Verify PR number matches what we expect
             actual_pr_number = pr_data.get("number", pr_number)
             if actual_pr_number != pr_number:
                 print(f"⚠️  Warning: PR number mismatch. Using {actual_pr_number} from PR data (expected {pr_number})")
                 pr_number = actual_pr_number  # Use the actual PR number from the data
+
+            # Try inline comments first (preferred method)
+            if use_inline:
+                try:
+                    self.post_inline_review_comments(pr_data, review_result)
+                    return  # Success!
+                except Exception as inline_error:
+                    error_msg = str(inline_error)
+                    if "403" in error_msg or "Permission denied" in error_msg:
+                        print(f"⚠️  Inline comments failed due to permissions: {error_msg}")
+                        print(f"   Falling back to general comment...")
+                        # Fall through to issue comment below
+                    else:
+                        print(f"⚠️  Inline comments failed: {error_msg}")
+                        print(f"   Falling back to general comment...")
+                        # Fall through to issue comment below
+
+            # Fallback to issue comment
+            print(f"   Using issue comment fallback...")
 
             # Create review comment body with inline comments included
             comment_body = self._format_review_comment(review_result, include_inline=True)
@@ -266,6 +288,149 @@ class GitHubService:
                 raise
             raise Exception(f"Error posting review comments: {error_msg}")
 
+    def post_inline_review_comments(self, pr_data: Dict, review_result: Dict) -> None:
+        """
+        Post inline review comments using GitHub's PR Review API
+        This creates actual line-level comments on the PR code changes
+        Requires 'pull-requests: write' permission in the workflow
+
+        Args:
+            pr_data: Pull request data from webhook
+            review_result: Analysis results from LLM
+        """
+        try:
+            repo_name = pr_data["base"]["repo"]["full_name"]
+            pr_number = pr_data["number"]
+            
+            print(f"📝 Preparing to post inline review comments...")
+            print(f"   Repository: {repo_name}")
+            print(f"   PR Number: {pr_number}")
+            
+            # Create inline comments from review results
+            inline_comments = self._create_inline_comments(review_result)
+            
+            if not inline_comments:
+                print("ℹ️  No inline comments to post (no file-specific issues with line numbers)")
+                return
+                
+            print(f"   Found {len(inline_comments)} inline comments to post")
+            
+            # Create review body with summary
+            review_body = self._create_review_summary(review_result)
+            
+            owner, repo = repo_name.split("/")
+            api_url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/reviews"
+            
+            headers = {
+                "Authorization": f"token {self.token}",
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "PR-Reviewer-Action"
+            }
+            
+            review_data = {
+                "body": review_body,
+                "event": "COMMENT",  # Options: APPROVE, REQUEST_CHANGES, COMMENT
+                "comments": inline_comments
+            }
+            
+            print(f"   API URL: {api_url}")
+            print(f"   Review body length: {len(review_body)} characters")
+            print(f"   Inline comments: {len(inline_comments)}")
+            
+            response = requests.post(
+                api_url,
+                json=review_data,
+                headers=headers,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                response_data = response.json()
+                review_id = response_data.get("id", "N/A")
+                review_url = response_data.get("html_url", "N/A")
+                print(f"✅ Inline review posted successfully!")
+                print(f"   Review ID: {review_id}")
+                print(f"   Review URL: {review_url}")
+                print(f"   PR #{pr_number} in {repo_name}")
+                print(f"   View PR: https://github.com/{repo_name}/pull/{pr_number}")
+                
+                # Log details of posted comments
+                for i, comment in enumerate(inline_comments, 1):
+                    print(f"   Comment {i}: {comment['path']}:{comment['line']}")
+                
+            elif response.status_code == 403:
+                error_data = response.json() if response.text else {}
+                error_msg = error_data.get("message", "Forbidden")
+                raise Exception(
+                    f"Permission denied (403): Unable to post inline review on PR #{pr_number}.\n"
+                    f"Repository: {repo_name}\n"
+                    f"This usually means the workflow is missing required permissions.\n\n"
+                    f"SOLUTION: Add this to your workflow file under the job:\n\n"
+                    f"  permissions:\n"
+                    f"    pull-requests: write\n"
+                    f"    contents: read\n\n"
+                    f"If the PR is from a fork, you may need to use a Personal Access Token (PAT)\n"
+                    f"instead of GITHUB_TOKEN. See README.md for details.\n\n"
+                    f"GitHub API error: {error_msg}"
+                )
+            else:
+                error_text = response.text[:500]
+                print(f"❌ Failed to post inline review")
+                print(f"   Status code: {response.status_code}")
+                print(f"   Response: {error_text}")
+                raise Exception(f"Failed to post inline review: HTTP {response.status_code} - {error_text}")
+                
+        except Exception as e:
+            error_msg = str(e)
+            # Provide helpful error message for 403 errors
+            if "403" in error_msg or "Resource not accessible by integration" in error_msg or "Permission denied" in error_msg:
+                raise
+            raise Exception(f"Error posting inline review comments: {error_msg}")
+    
+    def _create_review_summary(self, review_result: Dict) -> str:
+        """
+        Create a concise review summary for the PR review body
+        """
+        summary = "## 🤖 AI Code Review\n\n"
+        
+        # Overall summary
+        if review_result.get("summary"):
+            summary += f"{review_result['summary']}\n\n"
+        
+        # Quick stats
+        issues_count = len(review_result.get("issues", []))
+        file_issues_count = len(review_result.get("file_issues", []))
+        suggestions_count = len(review_result.get("suggestions", []))
+        
+        if issues_count > 0 or file_issues_count > 0 or suggestions_count > 0:
+            summary += "### 📊 Review Summary\n\n"
+            if issues_count > 0:
+                summary += f"- 🐛 **{issues_count}** general issues found\n"
+            if file_issues_count > 0:
+                summary += f"- 📍 **{file_issues_count}** line-specific comments below\n"
+            if suggestions_count > 0:
+                summary += f"- 💡 **{suggestions_count}** suggestions for improvement\n"
+            summary += "\n"
+        
+        # Overall score
+        score = review_result.get("overall_score", 0)
+        if score > 0:
+            if score >= 85:
+                emoji = "✅"
+                status = "Great job!"
+            elif score >= 70:
+                emoji = "🟡"
+                status = "Good work with room for improvement"
+            else:
+                emoji = "🔴"
+                status = "Needs attention"
+            
+            summary += f"### {emoji} Overall Score: {score}/100\n{status}\n\n"
+        
+        summary += "*📍 Check the inline comments below for specific feedback on individual lines.*"
+        
+        return summary
+
     def _detect_language(self, filename: str) -> str:
         """Detect programming language from filename"""
         extensions = {
@@ -353,17 +518,62 @@ class GitHubService:
         return comment
 
     def _create_inline_comments(self, review_result: Dict) -> List[Dict]:
-        """Create inline comments for specific lines"""
+        """
+        Create inline comments for specific lines from review results
+        
+        Returns:
+            List of comment objects for GitHub PR Review API
+        """
         comments = []
 
+        # Process file-specific issues with line numbers
         for issue in review_result.get("file_issues", []):
             if issue.get("line") and issue.get("file"):
-                comments.append(
-                    {
-                        "path": issue["file"],
-                        "line": issue["line"],
-                        "body": issue["message"],
-                    }
+                severity = issue.get("severity", "info").upper()
+                emoji = "🔴" if severity == "HIGH" else "🟡" if severity == "MEDIUM" else "🔵"
+                
+                comment_body = f"{emoji} **{severity}**: {issue.get('message', '')}"
+                
+                # Add suggestion if available
+                if issue.get("suggestion"):
+                    comment_body += f"\n\n💡 **Suggestion**: {issue['suggestion']}"
+                
+                # Add category if available
+                if issue.get("category"):
+                    comment_body += f"\n\n🏷️ **Category**: {issue['category']}"
+                
+                comments.append({
+                    "path": issue["file"],
+                    "line": int(issue["line"]),  # Ensure it's an integer
+                    "body": comment_body,
+                })
+        
+        # Also process general issues that have file/line info
+        for issue in review_result.get("issues", []):
+            if issue.get("line") and issue.get("file"):
+                # Skip if already processed in file_issues
+                existing = any(
+                    c["path"] == issue["file"] and c["line"] == int(issue["line"])
+                    for c in comments
                 )
+                if existing:
+                    continue
+                    
+                severity = issue.get("severity", "info").upper()
+                emoji = "🔴" if severity == "HIGH" else "🟡" if severity == "MEDIUM" else "🔵"
+                
+                comment_body = f"{emoji} **{severity}**: {issue.get('message', '')}"
+                
+                if issue.get("suggestion"):
+                    comment_body += f"\n\n💡 **Suggestion**: {issue['suggestion']}"
+                    
+                if issue.get("category"):
+                    comment_body += f"\n\n🏷️ **Category**: {issue['category']}"
+                
+                comments.append({
+                    "path": issue["file"],
+                    "line": int(issue["line"]),
+                    "body": comment_body,
+                })
 
         return comments

@@ -154,7 +154,23 @@ class ReviewService:
             code=patch, filename=filename, language=language
         )
 
-        return analysis
+        # Separate issues with line numbers from general issues
+        general_issues = []
+        file_issues = []
+        
+        for issue in analysis.get("issues", []):
+            if issue.get("line") and issue.get("file"):
+                # This is a line-specific issue
+                file_issues.append(issue)
+            else:
+                # This is a general issue for the file
+                general_issues.append(issue)
+        
+        return {
+            "issues": general_issues,
+            "file_issues": file_issues,
+            "suggestions": analysis.get("suggestions", [])
+        }
 
     def _generate_summary(self, review_result: Dict, diff_data: Dict) -> str:
         """Generate overall review summary using LLM"""
