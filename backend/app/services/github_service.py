@@ -4,7 +4,8 @@ Service for handling GitHub operations
 import os
 import requests
 from github import Github
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple, Optional
+import re
 
 
 class GitHubService:
@@ -288,6 +289,39 @@ class GitHubService:
                 raise
             raise Exception(f"Error posting review comments: {error_msg}")
 
+    def _parse_diff_ranges(self, diff_data: Dict[str, Any]) -> Dict[str, List[tuple]]:
+        """
+        Parse PR diff to find valid line ranges for comments.
+        Returns a dict mapping filename -> list of (start_line, end_line) tuples
+        """
+        valid_ranges = {}
+        
+        for file in diff_data.get("files", []):
+            filename = file.get("filename")
+            patch = file.get("patch", "")
+            if not filename or not patch:
+                continue
+                
+            ranges = []
+            # Parse hunks: @@ -original,count +new,count @@
+            # We only care about the new line numbers (the one with +)
+            # Regex captures start_line and optional count
+            hunk_headers = re.finditer(r'@@\s*-[0-9,]+\s*\+(\d+)(?:,(\d+))?\s*@@', patch)
+            
+            for match in hunk_headers:
+                start_line = int(match.group(1))
+                # If count is missing, it defaults to 1
+                count = int(match.group(2)) if match.group(2) else 1
+                
+                # The valid range covers these lines
+                end_line = start_line + count - 1
+                ranges.append((start_line, end_line))
+                
+            if ranges:
+                valid_ranges[filename] = ranges
+                
+        return valid_ranges
+
     def post_inline_review_comments(self, pr_data: Dict, review_result: Dict) -> None:
         """
         Post inline review comments using GitHub's PR Review API
@@ -306,63 +340,34 @@ class GitHubService:
             print(f"   Repository: {repo_name}")
             print(f"   PR Number: {pr_number}")
             
-            # Create inline comments from review results
-            inline_comments = self._create_inline_comments(review_result)
+            # 1. Fetch Diff Data to validate lines
+            valid_ranges = {}
+            try:
+                diff_data = self.get_pr_diff(pr_data)
+                valid_ranges = self._parse_diff_ranges(diff_data)
+                print(f"   Valid line ranges loaded for {len(valid_ranges)} files")
+            except Exception as e:
+                print(f"⚠️ Warning: Could not parse diff for line validation: {e}")
+                print("   Will try to post comments but they might fail if lines are outside diff.")
+
+            # 2. Create inline comments (split into valid and skipped)
+            inline_comments, skipped_comments = self._create_inline_comments(review_result, valid_ranges)
             
             # Debug: Show what we have in review_result
             print(f"   Debug: file_issues count: {len(review_result.get('file_issues', []))}")
             print(f"   Debug: general issues count: {len(review_result.get('issues', []))}")
             
-            # Show sample of file_issues for debugging
-            if review_result.get('file_issues'):
-                for i, issue in enumerate(review_result['file_issues'][:2]):  # Show first 2
-                    print(f"   Debug file_issue {i+1}: file={issue.get('file')}, line={issue.get('line')}, message={issue.get('message', '')[:50]}...")
+            if not inline_comments and not skipped_comments:
+                print("⚠️  No inline comments to post")
             
-            if not inline_comments:
-                print("⚠️  No inline comments to post (no file-specific issues with line numbers)")
-                print("   Attempting to create inline comments from general issues...")
-                
-                # Try to create inline comments from general issues by placing them on first changed line
-                # Get the PR diff to find changed lines
-                try:
-                    diff_data = self.get_pr_diff(pr_data)
-                    general_issues = review_result.get("issues", [])
-                    
-                    if general_issues and diff_data.get("files"):
-                        # Find the first file with changes
-                        first_file = diff_data["files"][0] if diff_data["files"] else None
-                        if first_file:
-                            file_path = first_file.get("filename", "")
-                            # Try to get line numbers from the file diff
-                            file_patch = first_file.get("patch", "")
-                            if file_patch:
-                                # Extract first added line from patch
-                                import re
-                                hunk_match = re.search(r'@@\s*-\d+(?:,\d+)?\s*\+(\d+)(?:,\d+)?\s*@@', file_patch)
-                                if hunk_match:
-                                    first_line = int(hunk_match.group(1))
-                                    # Create inline comments for top 3 general issues
-                                    for idx, issue in enumerate(general_issues[:3]):
-                                        inline_comments.append({
-                                            "path": file_path,
-                                            "line": first_line + idx,  # Space them out
-                                            "body": f"**{issue.get('severity', 'info').upper()}**: {issue.get('message', '')}"
-                                        })
-                                    print(f"   Created {len(inline_comments)} inline comments from general issues")
-                except Exception as e:
-                    print(f"   Could not create inline comments from general issues: {e}")
-                
-                if not inline_comments:
-                    print("   Falling back to general comment instead.")
-                    return
-                
-            print(f"   Found {len(inline_comments)} inline comments to post")
+            print(f"   Found {len(inline_comments)} valid inline comments to post")
+            print(f"   Skipped {len(skipped_comments)} comments (outside diff context) - moving to summary")
+            
             for i, comment in enumerate(inline_comments):
                 print(f"   Comment {i+1}: {comment['path']} line {comment['line']}")
-                print(f"      Body preview: {comment['body'][:100]}...")
-            
-            # Create review body with summary
-            review_body = self._create_review_summary(review_result)
+
+            # 3. Create review body with summary (including skipped comments)
+            review_body = self._create_review_summary(review_result, skipped_comments)
             
             owner, repo = repo_name.split("/")
             api_url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/reviews"
@@ -381,7 +386,6 @@ class GitHubService:
             
             print(f"   API URL: {api_url}")
             print(f"   Review body length: {len(review_body)} characters")
-            print(f"   Inline comments: {len(inline_comments)}")
             
             response = requests.post(
                 api_url,
@@ -400,18 +404,11 @@ class GitHubService:
                 print(f"   PR #{pr_number} in {repo_name}")
                 print(f"   View PR: https://github.com/{repo_name}/pull/{pr_number}")
                 
-                # Log details of posted comments
-                for i, comment in enumerate(inline_comments, 1):
-                    print(f"   Comment {i}: {comment['path']}:{comment['line']}")
-                
             elif response.status_code == 422:
                 # Validation error - often means line numbers are invalid
                 error_data = response.json() if response.text else {}
                 error_msg = error_data.get("message", "Unprocessable Entity")
                 print(f"❌ GitHub API validation error (422): {error_msg}")
-                print(f"   This usually means line numbers are invalid or don't exist in the diff")
-                print(f"   Response: {response.text[:500]}")
-                
                 # Try to extract which comment failed
                 errors = error_data.get("errors", [])
                 for error in errors:
@@ -424,31 +421,23 @@ class GitHubService:
                 error_msg = error_data.get("message", "Forbidden")
                 raise Exception(
                     f"Permission denied (403): Unable to post inline review on PR #{pr_number}.\n"
-                    f"Repository: {repo_name}\n"
-                    f"This usually means the workflow is missing required permissions.\n\n"
-                    f"SOLUTION: Add this to your workflow file under the job:\n\n"
-                    f"  permissions:\n"
-                    f"    pull-requests: write\n"
-                    f"    contents: read\n\n"
-                    f"If the PR is from a fork, you may need to use a Personal Access Token (PAT)\n"
-                    f"instead of GITHUB_TOKEN. See README.md for details.\n\n"
                     f"GitHub API error: {error_msg}"
                 )
             else:
                 error_text = response.text[:500]
                 print(f"❌ Failed to post inline review")
                 print(f"   Status code: {response.status_code}")
-                print(f"   Response: {error_text}")
+                # If we have 0 valid comments but some skipped, we might have sent an empty comments list
+                # which is allowed, but maybe validation failed on body?
                 raise Exception(f"Failed to post inline review: HTTP {response.status_code} - {error_text}")
                 
         except Exception as e:
             error_msg = str(e)
-            # Provide helpful error message for 403 errors
             if "403" in error_msg or "Resource not accessible by integration" in error_msg or "Permission denied" in error_msg:
                 raise
             raise Exception(f"Error posting inline review comments: {error_msg}")
     
-    def _create_review_summary(self, review_result: Dict) -> str:
+    def _create_review_summary(self, review_result: Dict, skipped_comments: List[Dict] = None) -> str:
         """
         Create a concise review summary for the PR review body
         """
@@ -488,175 +477,102 @@ class GitHubService:
             
             summary += f"### {emoji} Overall Score: {score}/100\n{status}\n\n"
         
+        # skipped comments section
+        if skipped_comments:
+            summary += "### ⚠️ Comments on Unchanged Lines & Context\n\n"
+            summary += "The following issues were found but could not be posted inline because they are outside the PR diff context:\n\n"
+            
+            for comment in skipped_comments:
+                path = comment.get("path", "unknown")
+                line = comment.get("line", "?")
+                body = comment.get("body", "").replace("\n", " ") 
+                # truncate body if too long
+                if len(body) > 100:
+                    body = body[:100] + "..."
+                
+                summary += f"**`{path}`:{line}**\n"
+                summary += f"> {body}\n\n"
+
         summary += "*📍 Check the inline comments below for specific feedback on individual lines.*"
         
         return summary
 
-    def _detect_language(self, filename: str) -> str:
-        """Detect programming language from filename"""
-        extensions = {
-            ".py": "python",
-            ".js": "javascript",
-            ".ts": "typescript",
-            ".java": "java",
-            ".cpp": "cpp",
-            ".c": "c",
-            ".go": "go",
-            ".rb": "ruby",
-            ".php": "php",
-            ".swift": "swift",
-            ".kt": "kotlin",
-            ".rs": "rust",
-        }
-
-        ext = os.path.splitext(filename)[1].lower()
-        return extensions.get(ext, "unknown")
-
-    def _format_review_comment(self, review_result: Dict, include_inline: bool = False) -> str:
-        """Format the review result into a markdown comment"""
-        comment = "## 🤖 AI Code Review\n\n"
-
-        # Summary section
-        if review_result.get("summary"):
-            comment += f"### Summary\n{review_result['summary']}\n\n"
-
-        # Issues Found section (simplified format to match README)
-        if review_result.get("issues"):
-            comment += "### Issues Found\n\n"
-            for issue in review_result["issues"]:
-                severity = issue.get("severity", "info").upper()
-                category = issue.get("category", "general").capitalize()
-                emoji = (
-                    "🔴" if severity == "HIGH" else "🟡" if severity == "MEDIUM" else "🔵"
-                )
-                
-                # Issue header (matches README format)
-                comment += f"{emoji} **{severity}**: {issue.get('message')}\n"
-                
-                # Location (simplified format)
-                file_path = issue.get('file', '')
-                line_num = issue.get('line', '')
-                if file_path:
-                    location = f"   - Location: `{file_path}`"
-                    if line_num:
-                        location += f":{line_num}"
-                    comment += location + "\n"
-                
-                # Risk/Category (simplified)
-                if category and category.lower() != "general":
-                    comment += f"   - Risk: {category} vulnerability\n"
-                
-                # Suggestion (simplified)
-                if issue.get('suggestion'):
-                    comment += f"   - Suggestion: {issue.get('suggestion')}\n"
-                
-                comment += "\n"
-
-        # Include file-specific issues if available
-        if include_inline and review_result.get("file_issues"):
-            comment += "### File-Specific Issues\n\n"
-            for file_issue in review_result.get("file_issues", []):
-                if file_issue.get("file") and file_issue.get("line"):
-                    comment += f"**`{file_issue['file']}`** (line {file_issue['line']}): {file_issue.get('message', '')}\n"
-            comment += "\n"
-
-        # Suggestions section (simplified format to match README)
-        if review_result.get("suggestions"):
-            comment += "### Suggestions\n"
-            for suggestion in review_result["suggestions"]:
-                # Simple bullet format like README example
-                if isinstance(suggestion, dict):
-                    comment += f"- {suggestion.get('description', suggestion.get('title', ''))}\n"
-                else:
-                    comment += f"- {suggestion}\n"
-            comment += "\n"
-        
-        # Simple footer like README example
-        comment += (
-            "---\n*This review was generated automatically by the PR Reviewer Bot*"
-        )
-
-        return comment
-
-    def _create_inline_comments(self, review_result: Dict) -> List[Dict]:
+    def _create_inline_comments(self, review_result: Dict, valid_ranges: Dict[str, List[tuple]]) -> Tuple[List[Dict], List[Dict]]:
         """
-        Create inline comments for specific lines from review results
-        
-        Returns:
-            List of comment objects for GitHub PR Review API
+        Create inline comments for specific lines from review results.
+        Returns: (valid_comments, skipped_comments)
         """
-        comments = []
+        valid_comments = []
+        skipped_comments = []
 
-        # Process file-specific issues with line numbers
-        for issue in review_result.get("file_issues", []):
-            if issue.get("line") and issue.get("file"):
-                severity = issue.get("severity", "info").upper()
-                emoji = "🔴" if severity == "HIGH" else "🟡" if severity == "MEDIUM" else "🔵"
-                
-                comment_body = f"{emoji} **{severity}**: {issue.get('message', '')}"
-                
-                # Add suggestion if available
-                if issue.get("suggestion"):
-                    comment_body += f"\n\n💡 **Suggestion**: {issue['suggestion']}"
-                
-                # Add category if available
-                if issue.get("category"):
-                    comment_body += f"\n\n🏷️ **Category**: {issue['category']}"
-                
-                # Validate and convert line number
-                line_num = int(issue["line"])
-                if line_num <= 0 or line_num > 10000:  # Reasonable bounds
-                    print(f"   Warning: Invalid line number {line_num} for {issue['file']}, skipping inline comment")
-                    continue
-                
-                # Create comment with proper format for GitHub PR Review API
-                comment = {
-                    "path": issue["file"],
-                    "body": comment_body,
-                }
-                
-                # Use 'line' for single-line comments on the right side of diff
-                # This should be the line number in the new version of the file
-                comment["line"] = line_num
-                
-                comments.append(comment)
-                print(f"   Created inline comment: {issue['file']}:{line_num}")
-        
-        # Also process general issues that have file/line info
-        for issue in review_result.get("issues", []):
-            if issue.get("line") and issue.get("file"):
-                # Skip if already processed in file_issues
-                existing = any(
-                    c["path"] == issue["file"] and c.get("line") == int(issue["line"])
-                    for c in comments
-                )
-                if existing:
-                    continue
-                    
-                severity = issue.get("severity", "info").upper()
-                emoji = "🔴" if severity == "HIGH" else "🟡" if severity == "MEDIUM" else "🔵"
-                
-                comment_body = f"{emoji} **{severity}**: {issue.get('message', '')}"
-                
-                if issue.get("suggestion"):
-                    comment_body += f"\n\n💡 **Suggestion**: {issue['suggestion']}"
-                    
-                if issue.get("category"):
-                    comment_body += f"\n\n🏷️ **Category**: {issue['category']}"
-                
-                # Validate line number  
-                line_num = int(issue["line"])
-                if line_num <= 0 or line_num > 10000:  # Reasonable bounds
-                    print(f"   Warning: Invalid line number {line_num} for {issue['file']}, skipping inline comment")
-                    continue
-                
-                comment = {
-                    "path": issue["file"],
-                    "body": comment_body,
-                    "line": line_num
-                }
-                
-                comments.append(comment)
-                print(f"   Created inline comment: {issue['file']}:{line_num}")
+        # Combine all possible line-oriented issues
+        all_issues = []
+        # 1. Explicit file issues
+        all_issues.extend(review_result.get("file_issues", []))
+        # 2. General issues that have file/line data
+        all_issues.extend([i for i in review_result.get("issues", []) if i.get("line") and i.get("file")])
 
-        return comments
+        # Track uniqueness to prevent duplicates
+        processed_locations = set()
+
+        for issue in all_issues:
+            file_path = issue.get("file")
+            line_str = issue.get("line")
+            message = issue.get("message", "")
+            
+            if not file_path or not line_str:
+                continue
+
+            try:
+                line_num = int(line_str)
+            except (ValueError, TypeError):
+                continue
+
+            # Avoid duplicates
+            location_key = f"{file_path}:{line_num}"
+            if location_key in processed_locations:
+                continue
+            processed_locations.add(location_key)
+
+            # Build comment content
+            severity = issue.get("severity", "info").upper()
+            emoji = "🔴" if severity == "HIGH" else "🟡" if severity == "MEDIUM" else "🔵"
+            comment_body = f"{emoji} **{severity}**: {message}"
+            
+            if issue.get("suggestion"):
+                comment_body += f"\n\n💡 **Suggestion**: {issue['suggestion']}"
+            if issue.get("category"):
+                comment_body += f"\n\n🏷️ **Category**: {issue['category']}"
+
+            comment_data = {
+                "path": file_path,
+                "body": comment_body,
+                "line": line_num
+            }
+
+            # VALIDATION LOGIC
+            is_valid = False
+            # If we have validation data, check it
+            if valid_ranges:
+                ranges = valid_ranges.get(file_path, [])
+                # Check if line_num is in any of the ranges
+                for start, end in ranges:
+                    if start <= line_num <= end:
+                        is_valid = True
+                        break
+            else:
+                # If we failed to get ranges (e.g. diff fetch error), we have two choices:
+                # 1. Be optimistic and try to post everything (risks 422 error)
+                # 2. Be safe and skip everything (moves to summary)
+                # We'll choose Option 2 for safety if we strictly failed fast,
+                # BUT if valid_ranges is empty because the dict was empty (no changes?),
+                # then it's definitely invalid.
+                # However, if valid_ranges dict is EMPTY but we have files, it implies no valid ranges found.
+                is_valid = False 
+
+            if is_valid:
+                valid_comments.append(comment_data)
+            else:
+                skipped_comments.append(comment_data)
+
+        return valid_comments, skipped_comments
