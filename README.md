@@ -18,12 +18,12 @@
 ## 🤖 Features
 
 - **AI-Powered Reviews**: Uses GPT-4 for intelligent code analysis and suggestions
-- **RAG Enhancement**: Learns from past reviews and best practices using Retrieval-Augmented Generation
+- **Simple Setup**: Easy integration with minimal configuration
 - **Comprehensive Analysis**: Checks for bugs, security vulnerabilities, performance issues, and code style
 - **Detailed Feedback**: Provides actionable suggestions with severity levels (High/Medium/Low)
-- **Fast Performance**: ~70ms overhead with local embeddings for RAG context
+- **Fast Performance**: Quick analysis with efficient processing
 - **Multi-Language Support**: Works with Python, JavaScript, TypeScript, Java, Go, Rust, and more
-- **GitHub & GitLab**: Supports both GitHub and GitLab platforms
+- **GitHub Integration**: Native GitHub Actions support
 - **Customizable**: Configurable review depth and model selection
 
 ## 🚀 Quick Start
@@ -61,13 +61,26 @@ jobs:
           fetch-depth: 0
       
       - name: AI PR Review
-        uses: meetgeetha/pr-reviewer-action@v1
+        uses: devopsgeetha/pr-reviewer-action@main
         with:
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           openai_model: gpt-4-turbo-preview
-
 ```
+
+#### Branch selection
+
+- **Stable (`main`)** – default reviewer profile:
+  ```yaml
+  uses: devopsgeetha/pr-reviewer-action@main
+  ```
+- **Agentic (`agentic_ai_v2`)** – experimental agent with deeper autonomy:
+  ```yaml
+  uses: devopsgeetha/pr-reviewer-action@agentic_ai_v2
+  ```
+  Choose the branch that matches the behavior you want before copying the workflow.
+
+> **Agentic AI branch**: If you need the agentic workflow variant, set the `uses` line to `devopsgeetha/pr-reviewer-action@agentic_ai_v2`.
 
 ### 3. Add Your API Key to Secrets
 
@@ -85,8 +98,6 @@ That's it! The action will automatically review your PR and post comments with d
 
 ## 📖 Usage
 
-### Basic Usage
-
 The action runs automatically on pull requests. Make sure to include the required permissions:
 
 ```yaml
@@ -97,22 +108,7 @@ jobs:
       issues: write
       pull-requests: read
     steps:
-      - uses: meetgeetha/pr-reviewer-action@main
-        with:
-          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
-```
-
-### Advanced Usage
-
-```yaml
-jobs:
-  review:
-    runs-on: ubuntu-latest
-    permissions:
-      issues: write
-      pull-requests: read
-    steps:
-      - uses: meetgeetha/pr-reviewer-action@main
+      - uses: devopsgeetha/pr-reviewer-action@main
         with:
           openai_api_key: ${{ secrets.OPENAI_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}  # Optional, defaults to GITHUB_TOKEN
@@ -148,16 +144,8 @@ The action runs on these pull request events:
 
 1. **PR Detection**: Action triggers on pull request events
 2. **Code Analysis**: Fetches PR diff and analyzes changed files
-3. **RAG Context**: Retrieves relevant best practices and past review patterns
-4. **AI Review**: GPT-4 analyzes code with context-aware suggestions
-5. **Comment Posting**: Posts detailed review comments on the PR
-
-### RAG (Retrieval-Augmented Generation)
-
-The action uses RAG to enhance reviews with:
-- **Best Practices**: Pre-seeded knowledge base with coding best practices
-- **Context Awareness**: Retrieves relevant patterns based on code changes
-- **Consistency**: Learns from past reviews to maintain consistent feedback
+3. **AI Review**: GPT-4 analyzes code and provides intelligent suggestions
+4. **Comment Posting**: Posts detailed review comments on the PR
 
 ### Review Categories
 
@@ -239,7 +227,7 @@ that should be addressed.
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/meetgeetha/pr-reviewer-action.git
+   git clone https://github.com/devopsgeetha/pr-reviewer-action.git
    cd pr-reviewer-action
    ```
 
@@ -348,8 +336,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 💬 Support
 
-- **Issues**: [GitHub Issues](https://github.com/meetgeetha/pr-reviewer-action/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/meetgeetha/pr-reviewer-action/discussions)
+- **Issues**: [GitHub Issues](https://github.com/devopsgeetha/pr-reviewer-action/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/devopsgeetha/pr-reviewer-action/discussions)
 
 ## ⭐ Star History
 
@@ -359,8 +347,9 @@ If you find this project useful, please consider giving it a star! ⭐
 
 <div align="center">
 
-**Made with ❤️ by [Geethakrishnan Balasubramanian](https://github.com/meetgeetha)**
+**Made with ❤️ by [Geethakrishnan Balasubramanian](https://github.com/devopsgeetha)**
 
-[Report Bug](https://github.com/meetgeetha/pr-reviewer-action/issues) • [Request Feature](https://github.com/meetgeetha/pr-reviewer-action/issues)
+[Report Bug](https://github.com/devopsgeetha/pr-reviewer-action/issues) • [Request Feature](https://github.com/devopsgeetha/pr-reviewer-action/issues)
 
 </div>
+

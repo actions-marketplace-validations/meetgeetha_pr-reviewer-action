@@ -154,7 +154,112 @@ class ReviewService:
             code=patch, filename=filename, language=language
         )
 
-        return analysis
+        # Debug: Show what LLM returned
+        print(f"   Debug LLM analysis for {filename}: {len(analysis.get('issues', []))} total issues")
+        
+        # Separate issues with line numbers from general issues
+        general_issues = []
+        file_issues = []
+        
+        # First, extract all added line numbers from the diff for fallback
+        all_added_lines = self._extract_all_added_lines(patch)
+        print(f"   Found {len(all_added_lines)} total added lines in diff")
+        
+        for i, issue in enumerate(analysis.get("issues", [])):
+            has_line = bool(issue.get("line"))
+            has_file = bool(issue.get("file"))
+            print(f"   Debug issue {i+1}: line={issue.get('line')}, file={issue.get('file')}, has_line={has_line}, has_file={has_file}")
+            
+            if issue.get("line") and issue.get("file"):
+                # This is a line-specific issue - validate the line number
+                line_num = int(issue.get("line"))
+                if line_num > 0 and line_num <= 10000:
+                    file_issues.append(issue)
+                    print(f"   -> Added to file_issues (line {line_num})")
+                else:
+                    print(f"   -> Invalid line number {line_num}, will try to infer")
+                    # Fall through to inference logic
+                    issue["line"] = None
+            
+            # If no line number, try to infer one
+            if not issue.get("line"):
+                inferred_line = None
+                
+                # Try inference based on issue message/keywords
+                inferred_line = self._try_infer_line_from_patch(patch, issue.get("message", ""))
+                
+                # If inference failed but we have added lines, use the first/middle one
+                if not inferred_line and all_added_lines:
+                    # Use middle line for better visibility, or first if only one
+                    if len(all_added_lines) > 1:
+                        inferred_line = all_added_lines[len(all_added_lines) // 2]
+                    else:
+                        inferred_line = all_added_lines[0]
+                    print(f"   -> Using fallback line {inferred_line} from added lines")
+                
+                if inferred_line:
+                    issue["line"] = inferred_line
+                    issue["file"] = filename
+                    file_issues.append(issue)
+                    print(f"   -> Inferred line {inferred_line}, added to file_issues")
+                else:
+                    # This is a general issue for the file
+                    general_issues.append(issue)
+                    print(f"   -> Added to general_issues (could not infer line)")
+        
+        print(f"   Debug result: {len(general_issues)} general, {len(file_issues)} file-specific issues")
+        
+        # Aggressive fallback: If no file_issues but have general issues, convert ALL of them
+        if len(file_issues) == 0 and len(general_issues) > 0:
+            print("   ⚠️  No file_issues found, converting ALL general issues to file_issues with inferred lines")
+            promoted_issues = []
+            
+            for idx, issue in enumerate(general_issues):
+                # Try to infer line number for any issue
+                inferred_line = self._try_infer_line_from_patch(patch, issue.get("message", ""))
+                
+                # If inference failed, use added lines (distribute across the diff)
+                if not inferred_line and all_added_lines:
+                    # Distribute issues across the diff
+                    if len(all_added_lines) > idx:
+                        inferred_line = all_added_lines[idx]
+                    else:
+                        # Cycle through available lines
+                        inferred_line = all_added_lines[idx % len(all_added_lines)]
+                
+                if inferred_line:
+                    issue["line"] = inferred_line
+                    issue["file"] = filename
+                    promoted_issues.append(issue)
+                    print(f"   -> Promoted general issue to file_issue at line {inferred_line}")
+                else:
+                    # Even if we can't infer, assign to first added line if available
+                    if all_added_lines:
+                        issue["line"] = all_added_lines[0]
+                        issue["file"] = filename
+                        promoted_issues.append(issue)
+                        print(f"   -> Assigned to first added line {all_added_lines[0]} as last resort")
+            
+            # Update the lists - promote all issues
+            general_issues = []
+            file_issues = promoted_issues
+            print(f"   After promotion: {len(general_issues)} general, {len(file_issues)} file-specific issues")
+        
+        # Final check: if we still have no file_issues but have general issues, create at least one inline comment
+        if len(file_issues) == 0 and len(general_issues) > 0 and all_added_lines:
+            print("   ⚠️  Creating at least one inline comment from general issues")
+            first_issue = general_issues[0]
+            first_issue["line"] = all_added_lines[0]
+            first_issue["file"] = filename
+            file_issues.append(first_issue)
+            general_issues = general_issues[1:]
+            print(f"   Created inline comment at line {all_added_lines[0]}")
+        
+        return {
+            "issues": general_issues,
+            "file_issues": file_issues,
+            "suggestions": analysis.get("suggestions", [])
+        }
 
     def _generate_summary(self, review_result: Dict, diff_data: Dict) -> str:
         """Generate overall review summary using LLM"""
@@ -167,6 +272,102 @@ class ReviewService:
         }
 
         return self.llm_service.generate_summary(context, review_result)
+
+    def _extract_all_added_lines(self, patch: str) -> List[int]:
+        """
+        Extract all line numbers for added lines from a git diff patch.
+        Returns list of line numbers in the new file version.
+        """
+        if not patch:
+            return []
+        
+        import re
+        added_lines = []
+        lines = patch.split('\n')
+        current_new_line = None
+        
+        for line in lines:
+            # Track hunk headers: @@ -X,Y +A,B @@
+            hunk_match = re.match(r'@@\s*-\d+(?:,\d+)?\s*\+(\d+)(?:,\d+)?\s*@@', line)
+            if hunk_match:
+                current_new_line = int(hunk_match.group(1))
+                continue
+            
+            if current_new_line is not None:
+                if line.startswith('+') and not line.startswith('+++'):
+                    # This is an added line
+                    added_lines.append(current_new_line)
+                    current_new_line += 1
+                elif line.startswith('-'):
+                    # Deleted line - don't increment new line counter
+                    continue
+                elif line.startswith(' ') or line == '':
+                    # Context line or empty - increment new line counter
+                    current_new_line += 1
+        
+        return added_lines
+    
+    def _try_infer_line_from_patch(self, patch: str, issue_message: str) -> Optional[int]:
+        """
+        Try to infer line number from patch context for critical issues
+        This is a fallback when LLM doesn't provide line numbers
+        Returns a line number that should exist in the new version of the file
+        """
+        if not patch or not issue_message:
+            return None
+        
+        print(f"   Analyzing patch for issue '{issue_message[:50]}...'")
+        print(f"   Patch sample: {patch[:200]}...")
+        
+        import re
+        
+        # Look for @@ -X,Y +A,B @@ headers to find line numbers
+        hunk_matches = re.findall(r'@@\s*-\d+(?:,\d+)?\s*\+(\d+)(?:,\d+)?\s*@@', patch)
+        if not hunk_matches:
+            return None
+        
+        try:
+            # Get all hunks and their starting line numbers
+            lines = patch.split('\n')
+            current_new_line = None
+            added_lines = []
+            
+            for line in lines:
+                # Track hunk headers
+                hunk_match = re.match(r'@@\s*-\d+(?:,\d+)?\s*\+(\d+)(?:,\d+)?\s*@@', line)
+                if hunk_match:
+                    current_new_line = int(hunk_match.group(1))
+                    continue
+                
+                if current_new_line is not None:
+                    if line.startswith('+') and not line.startswith('+++'):
+                        # This is an added line
+                        added_lines.append(current_new_line)
+                        current_new_line += 1
+                    elif line.startswith('-'):
+                        # Deleted line - don't increment new line counter
+                        continue
+                    elif line.startswith(' '):
+                        # Context line - increment new line counter
+                        current_new_line += 1
+            
+            # Return the first added line if we have any
+            if added_lines:
+                print(f"   Found {len(added_lines)} added lines: {added_lines[:5]}...")
+                # Return middle line if we have multiple, otherwise first
+                if len(added_lines) > 2:
+                    return added_lines[len(added_lines) // 2]
+                return added_lines[0]
+            
+            # If no added lines found, try to return a reasonable line number
+            if hunk_matches:
+                return int(hunk_matches[0])
+            
+            return None
+            
+        except (ValueError, IndexError) as e:
+            print(f"   Error inferring line number: {e}")
+            return None
 
     def _calculate_score(self, review_result: Dict) -> int:
         """Calculate overall code quality score"""
